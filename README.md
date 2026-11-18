@@ -28,6 +28,8 @@ docker run --rm --network=none bundle-transfer:local python3 -m unittest discove
 
 GET /manifest 返回 asset、version、revoked、url、size、sha256 和 files。下载端点支持 bytes=start-end 及 If-Range，响应含 ETag；验证标识不一致会返回完整 200。BundleSource 的 token、ignore_range、files 与 revoked 可控制地址轮换及清单变化。当前 Downloader 每次下载完整包，先验全包后改名；inspect_bundle 核验成员路径和摘要，Receiving 接收已经核验的成员。临时文件不表示成功接收。
 
+清单的 mode 为 full 或 delta。delta 的 base_version 是精确依赖版本，removals 列出移除路径，files 始终描述最终完整文件集合；补正压缩包只携带改动文件。BundleSource 可配置 final_files 表达最终集合，当前接收流程只支持 full。版本查询约定为 GET /manifest?version=整数，尚未留存的版本返回 404，不以当前版替代。
+
 ## 验证与数据
 
 测试与演示均创建临时目录和随机环回端口，不访问生产站点、真实邮箱或合作方账号。演示结束回收本轮服务及临时文件。库的持久化接口可使用调用方指定的本地路径；测试覆盖正常采集、证据身份和来源协议边界，具体用例见 tests。

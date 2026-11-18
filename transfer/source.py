@@ -5,7 +5,7 @@ import threading
 import zipfile
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 
 class BundleSource:
@@ -14,6 +14,10 @@ class BundleSource:
         self.token = 'signed-1'
         self.ignore_range = False
         self.revoked = False
+        self.mode = 'full'
+        self.base_version = None
+        self.removals = []
+        self.final_files = None
         self.requests = []
         self.files = {'subtitles/main.srt': '1\n00:00:01,000 --> 00:00:02,000\n山间来信\n'.encode(),
                       'cover.txt': b'cover-description'}
@@ -28,11 +32,13 @@ class BundleSource:
 
     def manifest(self, base_url):
         data = self.bundle()
+        final_files = self.files if self.final_files is None else self.final_files
         return {'asset': 'delivery-a', 'version': self.version, 'revoked': self.revoked,
+                'mode': self.mode, 'base_version': self.base_version, 'removals': self.removals,
                 'url': base_url + '/download/' + self.token, 'size': len(data),
                 'sha256': hashlib.sha256(data).hexdigest(),
                 'files': {name: {'sha256': hashlib.sha256(content).hexdigest(), 'size': len(content)}
-                          for name, content in self.files.items()}}
+                          for name, content in final_files.items()}}
 
 
 @contextmanager
@@ -41,9 +47,14 @@ def serve(source=None):
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
-            path = urlparse(self.path).path
+            parsed = urlparse(self.path)
+            path = parsed.path
             source.requests.append({'path': path, 'range': self.headers.get('Range'), 'if_range': self.headers.get('If-Range')})
             if path == '/manifest':
+                requested = parse_qs(parsed.query).get('version', [str(source.version)])[-1]
+                if requested != str(source.version):
+                    self.send_error(404, 'version not retained')
+                    return
                 data = json.dumps(source.manifest(f'http://127.0.0.1:{self.server.server_port}')).encode()
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')

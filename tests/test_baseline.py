@@ -12,6 +12,25 @@ from transfer.source import serve
 
 
 class BundleTests(unittest.TestCase):
+    def test_delta_manifest_describes_final_set_without_fabricating_members(self):
+        with serve() as (url, source):
+            source.mode = 'delta'
+            source.base_version = 1
+            source.version = 3
+            inherited = dict(source.files)
+            inherited.pop('cover.txt')
+            inherited['subtitles/new.srt'] = b'new subtitle'
+            source.files = {'subtitles/new.srt': b'new subtitle'}
+            source.removals = ['cover.txt']
+            source.final_files = inherited
+            manifest = source.manifest(url)
+            self.assertEqual(manifest['base_version'], 1)
+            self.assertIn('subtitles/main.srt', manifest['files'])
+            self.assertNotIn('cover.txt', manifest['files'])
+            with self.assertRaises(HTTPError) as error:
+                urlopen(url + '/manifest?version=1')
+            self.assertEqual(error.exception.code, 404)
+
     def test_full_download_verify_receive(self):
         with tempfile.TemporaryDirectory() as directory, serve() as (url, source):
             manifest = source.manifest(url)
