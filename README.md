@@ -30,6 +30,8 @@ GET /manifest 返回 asset、version、revoked、url、size、sha256 和 files�
 
 清单的 mode 为 full 或 delta。delta 的 base_version 是精确依赖版本，removals 列出移除路径，files 始终描述最终完整文件集合；补正压缩包只携带改动文件。BundleSource 可配置 final_files 表达最终集合，当前接收流程只支持 full。版本查询约定为 GET /manifest?version=整数，尚未留存的版本返回 404，不以当前版替代。
 
+本地来源调用 retain() 留存当前版本后，可改变 version、token 和 files 发布下一版，旧版清单和下载内容继续独立提供；这只是来源保留能力，不会自动采集或拼合补正版本。
+
 ## 验证与数据
 
 测试与演示均创建临时目录和随机环回端口，不访问生产站点、真实邮箱或合作方账号。演示结束回收本轮服务及临时文件。库的持久化接口可使用调用方指定的本地路径；测试覆盖正常采集、证据身份和来源协议边界，具体用例见 tests。

@@ -1,4 +1,5 @@
 import hashlib
+import copy
 import io
 import json
 import threading
@@ -18,9 +19,18 @@ class BundleSource:
         self.base_version = None
         self.removals = []
         self.final_files = None
+        self.retained = {}
         self.requests = []
         self.files = {'subtitles/main.srt': '1\n00:00:01,000 --> 00:00:02,000\n山间来信\n'.encode(),
                       'cover.txt': b'cover-description'}
+
+    def retain(self):
+        saved = copy.copy(self)
+        saved.files = dict(self.files)
+        saved.final_files = None if self.final_files is None else dict(self.final_files)
+        saved.removals = list(self.removals)
+        saved.retained = {}
+        self.retained[self.version] = saved
 
     def bundle(self):
         output = io.BytesIO()
@@ -52,14 +62,20 @@ def serve(source=None):
             source.requests.append({'path': path, 'range': self.headers.get('Range'), 'if_range': self.headers.get('If-Range')})
             if path == '/manifest':
                 requested = parse_qs(parsed.query).get('version', [str(source.version)])[-1]
-                if requested != str(source.version):
+                selected = source if requested == str(source.version) else source.retained.get(int(requested)) if requested.isdigit() else None
+                if selected is None:
                     self.send_error(404, 'version not retained')
                     return
-                data = json.dumps(source.manifest(f'http://127.0.0.1:{self.server.server_port}')).encode()
+                data = json.dumps(selected.manifest(f'http://127.0.0.1:{self.server.server_port}')).encode()
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
-            elif path == '/download/' + source.token:
-                data = source.bundle()
+            elif path.startswith('/download/'):
+                selected = next((candidate for candidate in [source, *source.retained.values()]
+                                 if path == '/download/' + candidate.token), None)
+                if selected is None:
+                    self.send_error(403)
+                    return
+                data = selected.bundle()
                 etag = '"' + hashlib.sha256(data).hexdigest() + '"'
                 requested = self.headers.get('Range')
                 match = self.headers.get('If-Range') in (None, etag)

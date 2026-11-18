@@ -12,6 +12,19 @@ from transfer.source import serve
 
 
 class BundleTests(unittest.TestCase):
+    def test_source_can_retain_an_exact_old_version(self):
+        with serve() as (url, source):
+            old_manifest = source.manifest(url)
+            old_bytes = source.bundle()
+            source.retain()
+            source.version = 2
+            source.token = 'signed-v2'
+            source.files = {'new.srt': b'new subtitle'}
+            with urlopen(url + '/manifest?version=1') as response:
+                self.assertEqual(__import__('json').load(response)['sha256'], old_manifest['sha256'])
+            with urlopen(old_manifest['url']) as response:
+                self.assertEqual(response.read(), old_bytes)
+
     def test_delta_manifest_describes_final_set_without_fabricating_members(self):
         with serve() as (url, source):
             source.mode = 'delta'
